@@ -57,18 +57,21 @@
       arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
       renderer="antialias: true; alpha: true"
     >
-      <!-- This camera follows your phone's GPS + compass. -->
-      <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
+      <!-- This camera follows your phone's GPS + compass.
+           gpsMinDistance: 0 means it keeps updating even while you stand still,
+           so the boxes get positioned right away. -->
+      <a-camera gps-new-camera="gpsMinDistance: 0"></a-camera>
     </a-scene>
 
     <script>
       const statusEl = document.getElementById("status");
       const setStatus = (t) => (statusEl.textContent = t);
+      let boxesPlaced = false;
 
       // Place four colored boxes a fixed distance around a lat/lon point.
       function placeBoxes(lat, lon) {
         const scene = document.querySelector("a-scene");
-        const meters = 15;
+        const meters = 10;
         // How many degrees equal our distance in meters:
         const dLat = meters / 111111;
         const dLon = meters / (111111 * Math.cos((lat * Math.PI) / 180));
@@ -111,17 +114,18 @@
         }
 
         document.getElementById("startOverlay").style.display = "none";
-        setStatus("Getting your location…");
+        setStatus("Getting your location… (hold still a few seconds)");
 
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const { latitude, longitude } = pos.coords;
-            setStatus("Location found. Placing boxes…");
-            placeBoxes(latitude, longitude);
-          },
-          (err) => setStatus("Location error: " + err.message + " (reload and allow Location)"),
-          { enableHighAccuracy: true, timeout: 15000 }
-        );
+        // Wait for AR.js's camera to report a GPS position, THEN place the
+        // boxes. Because gpsMinDistance is 0, the camera keeps firing these
+        // updates while you stand still, so the new boxes get positioned.
+        const camera = document.querySelector("[gps-new-camera]");
+        camera.addEventListener("gps-camera-update-position", (e) => {
+          if (!boxesPlaced && e.detail && e.detail.position) {
+            boxesPlaced = true;
+            placeBoxes(e.detail.position.latitude, e.detail.position.longitude);
+          }
+        });
       });
     </script>
   </body>
