@@ -58,9 +58,9 @@
       renderer="antialias: true; alpha: true"
     >
       <!-- This camera follows your phone's GPS + compass.
-           gpsMinDistance: 0 means it keeps updating even while you stand still,
-           so the boxes get positioned right away. -->
-      <a-camera gps-new-camera="gpsMinDistance: 0"></a-camera>
+           gps-camera is AR.js's well-tested location component; it re-positions
+           objects on every GPS reading, so they appear while you stand still. -->
+      <a-camera gps-camera rotation-reader></a-camera>
     </a-scene>
 
     <script>
@@ -88,7 +88,7 @@
           box.setAttribute("color", p.color);
           box.setAttribute("scale", "5 5 5"); // 5-meter box so it's easy to see
           box.setAttribute(
-            "gps-new-entity-place",
+            "gps-entity-place",
             `latitude: ${p.latitude}; longitude: ${p.longitude}`
           );
           scene.appendChild(box);
