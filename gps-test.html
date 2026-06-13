@@ -116,16 +116,19 @@
         document.getElementById("startOverlay").style.display = "none";
         setStatus("Getting your location… (hold still a few seconds)");
 
-        // Wait for AR.js's camera to report a GPS position, THEN place the
-        // boxes. Because gpsMinDistance is 0, the camera keeps firing these
-        // updates while you stand still, so the new boxes get positioned.
-        const camera = document.querySelector("[gps-new-camera]");
-        camera.addEventListener("gps-camera-update-position", (e) => {
-          if (!boxesPlaced && e.detail && e.detail.position) {
+        // Read your location directly (this is the method that worked before).
+        // Boxes get created here; because the camera uses gpsMinDistance: 0,
+        // it keeps updating and positions them in the world while you stand still.
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (boxesPlaced) return;
             boxesPlaced = true;
-            placeBoxes(e.detail.position.latitude, e.detail.position.longitude);
-          }
-        });
+            placeBoxes(pos.coords.latitude, pos.coords.longitude);
+          },
+          (err) =>
+            setStatus("Location error: " + err.message + " (reload and allow Location)"),
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
       });
     </script>
   </body>
