@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Salisbury NC Walking Tour</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- A-Frame: a free library that lets us build 3D / VR / AR scenes
+         using simple HTML-like tags. Loaded for free from a CDN
+         (a public file host), so there is nothing to install. -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  </head>
+
+  <body style="margin: 0;">
+    <!-- Everything inside <a-scene> is your 3D world. -->
+    <a-scene>
+      <!-- A box floating in front of the camera. -->
+      <a-box position="0 1.5 -3" rotation="0 45 0" color="#C8102E"></a-box>
+
+      <!-- A flat ground plane to stand on. -->
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="20" height="20" color="#7BC8A4"></a-plane>
+
+      <!-- The sky color all around you. -->
+      <a-sky color="#ECECEC"></a-sky>
+
+      <!-- A friendly floating label. -->
+      <a-text value="Salisbury NC Walking Tour" position="-1.6 2.6 -3" color="#222222"></a-text>
+    </a-scene>
+  </body>
+</html>
