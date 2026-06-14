@@ -27,6 +27,24 @@
         color: #fff; background: rgba(0,0,0,0.55);
         padding: 10px 14px; border-radius: 10px; font-size: 14px;
       }
+      #calPanel {
+        position: fixed; left: 10px; right: 10px; bottom: 70px; z-index: 9998;
+        display: none; background: rgba(0,0,0,0.7); color: #fff;
+        padding: 10px; border-radius: 12px;
+      }
+      #calPanel button {
+        font-size: 16px; padding: 12px 10px; border: none; border-radius: 8px;
+        background: #C8102E; color: #fff;
+      }
+      #dropBtn { width: 100%; }
+      #calPanel .nudge {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 5px; margin-top: 7px;
+      }
+      #coordOut {
+        margin-top: 8px; font-size: 13px; font-family: monospace;
+        white-space: pre-wrap; word-break: break-all; color: #FFD45A;
+      }
     </style>
   </head>
 
@@ -42,6 +60,18 @@
     </div>
 
     <div id="status">Waiting to start…</div>
+
+    <!-- On-site calibration controls (only shown with ?calibrate) -->
+    <div id="calPanel">
+      <button id="dropBtn">Drop sign 10m ahead of me</button>
+      <div class="nudge">
+        <button data-dir="N">▲ N</button>
+        <button data-dir="S">▼ S</button>
+        <button data-dir="W">◀ W</button>
+        <button data-dir="E">▶ E</button>
+      </div>
+      <div id="coordOut">Tap "Drop" while standing where visitors will stand.</div>
+    </div>
 
     <a-scene
       vr-mode-ui="enabled: false"
@@ -268,6 +298,62 @@
           "Tap Start, allow Camera + Motion, then turn until you face north to find it.";
       }
 
+      // ---- CALIBRATE MODE: position the sign live from your phone ----
+      const isCalibrate = new URLSearchParams(location.search).has("calibrate");
+      let signLat = TOWER.lat;
+      let signLon = TOWER.lon;
+      const metersPerLon = (lat) => 111111 * Math.cos((lat * Math.PI) / 180);
+
+      // Move the sign to the current signLat/signLon and refresh it immediately.
+      function placeSign() {
+        const sign = document.getElementById("bellTowerSign");
+        sign.setAttribute(
+          "gps-entity-place",
+          `latitude: ${signLat}; longitude: ${signLon}`
+        );
+        // Force AR.js to reposition the sign right now (don't wait for movement).
+        window.dispatchEvent(new CustomEvent("gps-camera-origin-coord-set"));
+        const out = document.getElementById("coordOut");
+        if (out) {
+          out.textContent =
+            "latitude: " + signLat.toFixed(6) + "; longitude: " + signLon.toFixed(6);
+        }
+      }
+
+      if (isCalibrate) {
+        document.getElementById("introText").innerHTML =
+          "CALIBRATE MODE — stand where visitors will stand, facing the tower.<br /><br />" +
+          "Tap Start, allow all permissions, then use the controls to place the sign.";
+
+        document.getElementById("dropBtn").addEventListener("click", () => {
+          const cam = document.querySelector("[gps-camera]");
+          const gps = cam && cam.components && cam.components["gps-camera"];
+          if (!gps || !gps.currentCoords) {
+            setStatus("No GPS fix yet — wait a few seconds and try again.");
+            return;
+          }
+          const lat = gps.currentCoords.latitude;
+          const lon = gps.currentCoords.longitude;
+          const h = ((gps.heading == null ? 0 : gps.heading) * Math.PI) / 180;
+          signLat = lat + (10 * Math.cos(h)) / 111111; // 10m in the direction you face
+          signLon = lon + (10 * Math.sin(h)) / metersPerLon(lat);
+          placeSign();
+          setStatus("Sign dropped 10m ahead. Nudge N/S/E/W to fine-tune.");
+        });
+
+        document.querySelectorAll("#calPanel .nudge button").forEach((b) => {
+          b.addEventListener("click", () => {
+            const step = 1; // meters per tap
+            const dir = b.getAttribute("data-dir");
+            if (dir === "N") signLat += step / 111111;
+            if (dir === "S") signLat -= step / 111111;
+            if (dir === "E") signLon += step / metersPerLon(signLat);
+            if (dir === "W") signLon -= step / metersPerLon(signLat);
+            placeSign();
+          });
+        });
+      }
+
       document.getElementById("startBtn").addEventListener("click", async () => {
         // iPhone: tap-to-enable motion/compass.
         try {
@@ -280,11 +366,16 @@
         } catch (e) {}
 
         document.getElementById("startOverlay").style.display = "none";
-        setStatus(
-          isPreview
-            ? "Preview running — turn slowly to find the Bell Tower sign."
-            : "Look toward the Bell Tower — the sign should appear."
-        );
+        if (isCalibrate) {
+          document.getElementById("calPanel").style.display = "block";
+          setStatus("Calibrate: face the tower, then tap 'Drop sign 10m ahead of me'.");
+        } else {
+          setStatus(
+            isPreview
+              ? "Preview running — turn slowly to find the Bell Tower sign."
+              : "Look toward the Bell Tower — the sign should appear."
+          );
+        }
       });
     </script>
   </body>
