@@ -45,6 +45,14 @@
         margin-top: 8px; font-size: 13px; font-family: monospace;
         white-space: pre-wrap; word-break: break-all; color: #FFD45A;
       }
+      /* On-screen diagnostic readout (shown in normal mode after Start). */
+      #diag {
+        position: fixed; top: 10px; left: 10px; right: 10px; z-index: 9998;
+        display: none; color: #9effa0; background: rgba(0,0,0,0.62);
+        padding: 8px 10px; border-radius: 8px;
+        font-family: monospace; font-size: 12px; line-height: 1.5;
+        white-space: pre-wrap;
+      }
     </style>
   </head>
 
@@ -60,6 +68,9 @@
     </div>
 
     <div id="status">Waiting to start…</div>
+
+    <!-- Live diagnostic readout (shown in normal mode to debug placement) -->
+    <div id="diag">diagnostic starting…</div>
 
     <!-- On-site calibration controls (only shown with ?calibrate) -->
     <div id="calPanel">
@@ -354,6 +365,93 @@
         });
       }
 
+      // ---- LIVE DIAGNOSTIC READOUT ----------------------------------------
+      // Shows, every half-second, the numbers that tell us WHY the sign is or
+      // isn't visible: GPS fix quality, your coords, the sign's target coords,
+      // distance + compass bearing to it, which way to turn, and — the key one
+      // — where AR.js actually placed the sign in the 3D world. A sane in-world
+      // distance (~5-20m) means it's rendering and you're just facing the wrong
+      // way; a wild or zero number means GPS placement itself is broken.
+      const toRad = (d) => (d * Math.PI) / 180;
+      const toDeg = (r) => (r * 180) / Math.PI;
+
+      // Great-circle distance between two lat/lon points, in meters.
+      function haversineM(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(a));
+      }
+
+      // Compass bearing (0-360°, 0=N) from point 1 to point 2.
+      function bearingDeg(lat1, lon1, lat2, lon2) {
+        const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+        const x =
+          Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+          Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+        return (toDeg(Math.atan2(y, x)) + 360) % 360;
+      }
+
+      // Read the sign's current GPS target (A-Frame parses the attribute to an object).
+      function signTarget() {
+        const sign = document.getElementById("bellTowerSign");
+        const v = sign && sign.getAttribute("gps-entity-place");
+        if (v && v.latitude != null && v.latitude !== "") {
+          return { lat: parseFloat(v.latitude), lon: parseFloat(v.longitude) };
+        }
+        return null;
+      }
+
+      function updateDiag() {
+        const el = document.getElementById("diag");
+        if (!el) return;
+        const cam = document.querySelector("[gps-camera]");
+        const gps = cam && cam.components && cam.components["gps-camera"];
+        const lines = [];
+
+        if (!gps || !gps.currentCoords) {
+          lines.push("GPS: waiting for a fix…");
+        } else {
+          const c = gps.currentCoords;
+          const acc = c.accuracy != null ? "±" + Math.round(c.accuracy) + "m" : "?";
+          const hdg = gps.heading == null ? "?" : Math.round(gps.heading) + "°";
+          lines.push("GPS fix: " + acc + "    heading: " + hdg);
+          lines.push("you:  " + c.latitude.toFixed(6) + ", " + c.longitude.toFixed(6));
+
+          const t = signTarget();
+          if (t) {
+            lines.push("sign: " + t.lat.toFixed(6) + ", " + t.lon.toFixed(6));
+            const d = haversineM(c.latitude, c.longitude, t.lat, t.lon);
+            const b = bearingDeg(c.latitude, c.longitude, t.lat, t.lon);
+            lines.push("distance: " + d.toFixed(1) + "m    bearing: " + Math.round(b) + "°");
+            if (gps.heading != null) {
+              let turn = (((b - gps.heading) % 360) + 540) % 360; // 0-360
+              turn -= 180; // -180..180
+              const dir = turn >= 0 ? "RIGHT" : "LEFT";
+              lines.push("turn " + dir + " " + Math.abs(Math.round(turn)) + "° to face the sign");
+            }
+          } else {
+            lines.push("sign: (no GPS target — preview mode?)");
+          }
+        }
+
+        // Where AR.js actually positioned the sign in the 3D scene.
+        const sign = document.getElementById("bellTowerSign");
+        if (sign && sign.object3D) {
+          const p = sign.object3D.position;
+          const worldDist = Math.sqrt(p.x * p.x + p.z * p.z);
+          lines.push(
+            "placed in-world: " + worldDist.toFixed(1) + "m  (x " +
+              p.x.toFixed(1) + ", z " + p.z.toFixed(1) + ", y " + p.y.toFixed(1) + ")"
+          );
+        }
+
+        el.textContent = lines.join("\n");
+      }
+
       document.getElementById("startBtn").addEventListener("click", async () => {
         // iPhone: tap-to-enable motion/compass.
         try {
@@ -366,6 +464,15 @@
         } catch (e) {}
 
         document.getElementById("startOverlay").style.display = "none";
+
+        // Turn on the live diagnostic readout whenever we're using real GPS
+        // (normal or calibrate mode — preview has no GPS target to report).
+        if (!isPreview) {
+          document.getElementById("diag").style.display = "block";
+          updateDiag();
+          setInterval(updateDiag, 500);
+        }
+
         if (isCalibrate) {
           document.getElementById("calPanel").style.display = "block";
           setStatus("Calibrate: face the tower, then tap 'Drop sign 10m ahead of me'.");
