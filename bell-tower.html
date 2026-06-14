@@ -108,19 +108,17 @@
         },
       });
 
-      // PREVIEW MODE: add ?preview to the URL to simulate standing ~12m south
-      // of the Bell Tower, so you can see the sign from anywhere (e.g. home).
+      // PREVIEW MODE: add ?preview to the URL to pin the sign 12m to your
+      // north (no real GPS needed), so you can check it from anywhere (e.g.
+      // home). Real mode (no ?preview) uses the tower's true coordinates.
       const isPreview = new URLSearchParams(location.search).has("preview");
       if (isPreview) {
-        const cam = document.querySelector("[gps-camera]");
-        const simLat = TOWER.lat - 0.00011; // ~12 meters south
-        cam.setAttribute(
-          "gps-camera",
-          `positionMinAccuracy: 1000; simulateLatitude: ${simLat}; simulateLongitude: ${TOWER.lon}`
-        );
+        const sign = document.getElementById("bellTowerSign");
+        sign.removeAttribute("gps-entity-place"); // stop GPS placement
+        sign.setAttribute("position", "0 1.6 -12"); // 12m to the north
         document.getElementById("introText").innerHTML =
-          "PREVIEW MODE — simulating a spot ~12m south of the Bell Tower.<br /><br />" +
-          "Tap Start, allow Camera + Motion, then turn around to find the sign.";
+          "PREVIEW MODE — the sign is pinned 12m to your north.<br /><br />" +
+          "Tap Start, allow Camera + Motion, then turn until you face north to find it.";
       }
 
       document.getElementById("startBtn").addEventListener("click", async () => {
