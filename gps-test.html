@@ -61,7 +61,12 @@
            positionMinAccuracy: 1000 lets AR.js set the origin even when the
            phone's first GPS fix is rough (default 100m is often too strict and
            leaves objects stuck on top of you). -->
-      <a-camera gps-camera="positionMinAccuracy: 1000" rotation-reader></a-camera>
+      <a-camera gps-camera="positionMinAccuracy: 1000" rotation-reader>
+        <!-- Head-locked reference box: always floats 3m in front of you.
+             If you can see THIS magenta box, rendering works fine and the
+             problem is purely the GPS-placed pillars / where you're aiming. -->
+        <a-box position="0 0 -3" scale="0.5 0.5 0.5" color="#FF00FF"></a-box>
+      </a-camera>
     </a-scene>
 
     <script>
@@ -72,7 +77,7 @@
       // Place four colored boxes a fixed distance around a lat/lon point.
       function placeBoxes(lat, lon) {
         const scene = document.querySelector("a-scene");
-        const meters = 10;
+        const meters = 8;
         // How many degrees equal our distance in meters:
         const dLat = meters / 111111;
         const dLon = meters / (111111 * Math.cos((lat * Math.PI) / 180));
@@ -86,8 +91,9 @@
 
         points.forEach((p) => {
           const box = document.createElement("a-box");
+          box.classList.add("gpsbox");
           box.setAttribute("color", p.color);
-          box.setAttribute("scale", "5 5 5"); // 5-meter box so it's easy to see
+          box.setAttribute("scale", "4 30 4"); // tall pillar: 4m wide, 30m high
           box.setAttribute(
             "gps-entity-place",
             `latitude: ${p.latitude}; longitude: ${p.longitude}`
@@ -102,7 +108,7 @@
       // Live readout so we can see what AR.js is actually doing.
       function startDiagnostics() {
         const camera = document.querySelector("[gps-camera]");
-        const boxes = Array.from(document.querySelectorAll("a-box"));
+        const boxes = Array.from(document.querySelectorAll(".gpsbox"));
         setInterval(() => {
           const gps = camera && camera.components && camera.components["gps-camera"];
           const origin = gps && gps.originCoords;
