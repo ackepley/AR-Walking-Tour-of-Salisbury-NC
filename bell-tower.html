@@ -75,17 +75,19 @@
         ></a-plane>
         <a-text
           value="THE BELL TOWER"
-          position="0 1.05 0.02"
+          position="0 1.05 0.05"
           align="center"
           width="6"
           color="#FFD45A"
+          render-on-top
         ></a-text>
         <a-text
           value="Built in 1892 as the bell tower of the First Presbyterian Church, designed by Philadelphia architect Charles W. Bolton in the Romanesque Revival style. The church was razed in 1971, but the tower was saved. Today it anchors Bell Tower Green, a 3.5-acre downtown park that opened in 2021."
-          position="0 -0.15 0.02"
+          position="0 -0.15 0.05"
           align="center"
           width="3.9"
           color="#FFFFFF"
+          render-on-top
         ></a-text>
       </a-entity>
     </a-scene>
@@ -141,6 +143,24 @@
             },
             false
           );
+        },
+      });
+
+      // Force text to always draw on top of its panel (kills z-fighting that
+      // slices letters when the sign is far away).
+      AFRAME.registerComponent("render-on-top", {
+        init: function () {
+          const apply = () => {
+            const mesh = this.el.getObject3D("text");
+            if (!mesh) return;
+            mesh.renderOrder = 10;
+            if (mesh.material) {
+              mesh.material.depthTest = false;
+              mesh.material.transparent = true;
+            }
+          };
+          this.el.addEventListener("object3dset", apply);
+          setTimeout(apply, 600);
         },
       });
 
