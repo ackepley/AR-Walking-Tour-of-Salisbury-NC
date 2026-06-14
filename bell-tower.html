@@ -66,29 +66,13 @@
         position="0 1.6 0"
         face-camera
       >
+        <!-- One flat panel; its image is drawn at runtime (see script). -->
         <a-plane
-          width="4.2"
+          id="signPlane"
+          width="4"
           height="3"
-          color="#13132b"
-          opacity="0.9"
-          material="side: double"
+          material="shader: flat; side: double"
         ></a-plane>
-        <a-text
-          value="THE BELL TOWER"
-          position="0 1.05 0.05"
-          align="center"
-          width="6"
-          color="#FFD45A"
-          render-on-top
-        ></a-text>
-        <a-text
-          value="Built in 1892 as the bell tower of the First Presbyterian Church, designed by Philadelphia architect Charles W. Bolton in the Romanesque Revival style. The church was razed in 1971, but the tower was saved. Today it anchors Bell Tower Green, a 3.5-acre downtown park that opened in 2021."
-          position="0 -0.15 0.05"
-          align="center"
-          width="3.9"
-          color="#FFFFFF"
-          render-on-top
-        ></a-text>
       </a-entity>
     </a-scene>
 
@@ -146,23 +130,82 @@
         },
       });
 
-      // Force text to always draw on top of its panel (kills z-fighting that
-      // slices letters when the sign is far away).
-      AFRAME.registerComponent("render-on-top", {
-        init: function () {
-          const apply = () => {
-            const mesh = this.el.getObject3D("text");
-            if (!mesh) return;
-            mesh.renderOrder = 10;
-            if (mesh.material) {
-              mesh.material.depthTest = false;
-              mesh.material.transparent = true;
-            }
-          };
-          this.el.addEventListener("object3dset", apply);
-          setTimeout(apply, 600);
-        },
-      });
+      // ---- Draw the sign as one high-res image (no layered 3D text) ----
+      const SIGN_TITLE = "THE BELL TOWER";
+      const SIGN_BODY =
+        "Built in 1892 as the bell tower of the First Presbyterian Church, " +
+        "designed by Philadelphia architect Charles W. Bolton in the Romanesque " +
+        "Revival style. The church was razed in 1971, but the tower was saved. " +
+        "Today it anchors Bell Tower Green, a 3.5-acre downtown park that opened in 2021.";
+
+      function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      function wrapText(ctx, text, cx, top, maxWidth, lineHeight) {
+        const words = text.split(" ");
+        let line = "";
+        let y = top;
+        for (let i = 0; i < words.length; i++) {
+          const test = line + words[i] + " ";
+          if (ctx.measureText(test).width > maxWidth && line !== "") {
+            ctx.fillText(line.trim(), cx, y);
+            line = words[i] + " ";
+            y += lineHeight;
+          } else {
+            line = test;
+          }
+        }
+        ctx.fillText(line.trim(), cx, y);
+      }
+
+      function makeSignCanvas() {
+        const c = document.createElement("canvas");
+        c.width = 1024;
+        c.height = 768;
+        const ctx = c.getContext("2d");
+        // background
+        ctx.fillStyle = "#13132b";
+        roundRect(ctx, 0, 0, c.width, c.height, 40);
+        ctx.fill();
+        // gold border
+        ctx.strokeStyle = "#FFD45A";
+        ctx.lineWidth = 10;
+        roundRect(ctx, 18, 18, c.width - 36, c.height - 36, 28);
+        ctx.stroke();
+        // title
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#FFD45A";
+        ctx.font = "bold 78px -apple-system, Helvetica, Arial, sans-serif";
+        ctx.fillText(SIGN_TITLE, c.width / 2, 170);
+        // body
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "46px -apple-system, Helvetica, Arial, sans-serif";
+        wrapText(ctx, SIGN_BODY, c.width / 2, 300, c.width - 160, 64);
+        return c;
+      }
+
+      function applySignTexture() {
+        const plane = document.getElementById("signPlane");
+        const mesh = plane && plane.getObject3D("mesh");
+        if (!mesh) {
+          setTimeout(applySignTexture, 200);
+          return;
+        }
+        const tex = new THREE.CanvasTexture(makeSignCanvas());
+        tex.anisotropy = 8;
+        tex.needsUpdate = true;
+        mesh.material.map = tex;
+        if (mesh.material.color) mesh.material.color.set("#ffffff");
+        mesh.material.needsUpdate = true;
+      }
+      applySignTexture();
 
       // Billboard: rotate an entity around its vertical axis to face the camera.
       AFRAME.registerComponent("face-camera", {
