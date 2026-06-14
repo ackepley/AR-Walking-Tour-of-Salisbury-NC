@@ -58,9 +58,10 @@
       renderer="antialias: true; alpha: true"
     >
       <!-- This camera follows your phone's GPS + compass.
-           gps-camera is AR.js's well-tested location component; it re-positions
-           objects on every GPS reading, so they appear while you stand still. -->
-      <a-camera gps-camera rotation-reader></a-camera>
+           positionMinAccuracy: 1000 lets AR.js set the origin even when the
+           phone's first GPS fix is rough (default 100m is often too strict and
+           leaves objects stuck on top of you). -->
+      <a-camera gps-camera="positionMinAccuracy: 1000" rotation-reader></a-camera>
     </a-scene>
 
     <script>
@@ -95,6 +96,38 @@
         });
 
         setStatus("Boxes placed! Slowly turn in a full circle to find all four.");
+        startDiagnostics();
+      }
+
+      // Live readout so we can see what AR.js is actually doing.
+      function startDiagnostics() {
+        const camera = document.querySelector("[gps-camera]");
+        const boxes = Array.from(document.querySelectorAll("a-box"));
+        setInterval(() => {
+          const gps = camera && camera.components && camera.components["gps-camera"];
+          const origin = gps && gps.originCoords;
+          const acc =
+            gps && gps.currentCoords && gps.currentCoords.accuracy
+              ? Math.round(gps.currentCoords.accuracy) + "m"
+              : "?";
+          const heading = gps && gps.heading != null ? Math.round(gps.heading) + "°" : "none";
+
+          let lines =
+            "origin: " + (origin ? "SET" : "not set yet") +
+            " | accuracy: " + acc +
+            " | compass: " + heading;
+
+          boxes.forEach((b, i) => {
+            const p = b.object3D.position;
+            const d = b.getAttribute("distance");
+            lines +=
+              "<br>box" + (i + 1) +
+              " pos(" + p.x.toFixed(1) + "," + p.y.toFixed(1) + "," + p.z.toFixed(1) + ")" +
+              (d != null ? " dist:" + Number(d).toFixed(0) + "m" : "");
+          });
+
+          statusEl.innerHTML = lines;
+        }, 1000);
       }
 
       document.getElementById("startBtn").addEventListener("click", async () => {
