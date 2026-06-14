@@ -49,8 +49,13 @@
       arjs="sourceType: webcam; debugUIEnabled: false"
       renderer="antialias: true; alpha: true"
     >
-      <!-- GPS + compass camera (no videoTexture; relaxed accuracy). -->
-      <a-camera gps-camera="positionMinAccuracy: 1000" rotation-reader></a-camera>
+      <!-- GPS + compass camera (no videoTexture; relaxed accuracy).
+           smooth-heading filters the noisy iOS compass to reduce jitter. -->
+      <a-camera
+        gps-camera="positionMinAccuracy: 1000"
+        rotation-reader
+        smooth-heading="alpha: 0.1"
+      ></a-camera>
 
       <!-- The Bell Tower info sign, anchored to the tower's real coordinates.
            position y=1.6 lifts it to about eye level; face-camera makes it
@@ -90,6 +95,54 @@
       const setStatus = (t) => (statusEl.textContent = t);
 
       const TOWER = { lat: 35.668573, lon: -80.473257 };
+
+      // Smooths the noisy iOS compass so the AR view doesn't twitch.
+      // It replaces AR.js's raw compass handler with a low-pass filtered one.
+      // alpha: lower = smoother but slightly more lag (0.1 is a good balance).
+      AFRAME.registerComponent("smooth-heading", {
+        schema: { alpha: { default: 0.1 } },
+        init: function () {
+          this.patched = false;
+          this.el.sceneEl.addEventListener("loaded", () => this.patch());
+          setTimeout(() => this.patch(), 800);
+        },
+        patch: function () {
+          if (this.patched) return;
+          const gps = this.el.components["gps-camera"];
+          if (!gps || !gps._onDeviceOrientation) return;
+          this.patched = true;
+
+          const eventName =
+            "ondeviceorientationabsolute" in window
+              ? "deviceorientationabsolute"
+              : "ondeviceorientation" in window
+              ? "deviceorientation"
+              : "";
+          if (!eventName) return;
+
+          // Remove AR.js's raw listener and install a smoothed wrapper.
+          window.removeEventListener(eventName, gps._onDeviceOrientation, false);
+          const orig = gps._onDeviceOrientation.bind(gps);
+          const alpha = this.data.alpha;
+          let smoothed = null;
+
+          window.addEventListener(
+            eventName,
+            function (event) {
+              orig(event); // let AR.js compute the raw heading
+              if (gps.heading == null) return;
+              if (smoothed === null) smoothed = gps.heading;
+              // shortest-path blend, handling the 360°/0° wrap
+              let diff = gps.heading - smoothed;
+              if (diff > 180) diff -= 360;
+              if (diff < -180) diff += 360;
+              smoothed = (smoothed + alpha * diff + 360) % 360;
+              gps.heading = smoothed;
+            },
+            false
+          );
+        },
+      });
 
       // Billboard: rotate an entity around its vertical axis to face the camera.
       AFRAME.registerComponent("face-camera", {
