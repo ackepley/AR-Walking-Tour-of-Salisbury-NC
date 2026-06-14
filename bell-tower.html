@@ -148,46 +148,73 @@
         ctx.closePath();
       }
 
-      function wrapText(ctx, text, cx, top, maxWidth, lineHeight) {
+      // Split text into lines that fit within maxWidth.
+      function wrapLines(ctx, text, maxWidth) {
         const words = text.split(" ");
+        const lines = [];
         let line = "";
-        let y = top;
-        for (let i = 0; i < words.length; i++) {
-          const test = line + words[i] + " ";
-          if (ctx.measureText(test).width > maxWidth && line !== "") {
-            ctx.fillText(line.trim(), cx, y);
-            line = words[i] + " ";
-            y += lineHeight;
+        for (const w of words) {
+          const test = line ? line + " " + w : w;
+          if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line);
+            line = w;
           } else {
             line = test;
           }
         }
-        ctx.fillText(line.trim(), cx, y);
+        if (line) lines.push(line);
+        return lines;
       }
 
       function makeSignCanvas() {
+        const W = 1024;
+        const margin = 70; // equal space above the title and below the last line
+        const sideMargin = 80; // left/right text inset
+        const titleFont = "bold 78px -apple-system, Helvetica, Arial, sans-serif";
+        const bodyFont = "46px -apple-system, Helvetica, Arial, sans-serif";
+        const titleBlock = 90; // vertical space the title occupies
+        const gap = 54; // space between title and body
+        const lineHeight = 64;
+
+        // Measure body wrapping first so we can size the canvas to fit.
         const c = document.createElement("canvas");
-        c.width = 1024;
-        c.height = 768;
-        const ctx = c.getContext("2d");
-        // background
+        let ctx = c.getContext("2d");
+        ctx.font = bodyFont;
+        const lines = wrapLines(ctx, SIGN_BODY, W - 2 * sideMargin);
+
+        const titleTop = margin;
+        const bodyTop = titleTop + titleBlock + gap;
+        const bodyBottom = bodyTop + (lines.length - 1) * lineHeight + 52;
+        const H = Math.round(bodyBottom + margin);
+
+        // Resizing clears the canvas, so set size, then draw.
+        c.width = W;
+        c.height = H;
+        ctx = c.getContext("2d");
+
         ctx.fillStyle = "#13132b";
-        roundRect(ctx, 0, 0, c.width, c.height, 40);
+        roundRect(ctx, 0, 0, W, H, 40);
         ctx.fill();
-        // gold border
         ctx.strokeStyle = "#FFD45A";
         ctx.lineWidth = 10;
-        roundRect(ctx, 18, 18, c.width - 36, c.height - 36, 28);
+        roundRect(ctx, 18, 18, W - 36, H - 36, 28);
         ctx.stroke();
-        // title
+
+        ctx.textBaseline = "top";
+        // Title: centered
         ctx.textAlign = "center";
         ctx.fillStyle = "#FFD45A";
-        ctx.font = "bold 78px -apple-system, Helvetica, Arial, sans-serif";
-        ctx.fillText(SIGN_TITLE, c.width / 2, 170);
-        // body
+        ctx.font = titleFont;
+        ctx.fillText(SIGN_TITLE, W / 2, titleTop);
+        // Body: left-justified, like a paragraph
+        ctx.textAlign = "left";
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "46px -apple-system, Helvetica, Arial, sans-serif";
-        wrapText(ctx, SIGN_BODY, c.width / 2, 300, c.width - 160, 64);
+        ctx.font = bodyFont;
+        let y = bodyTop;
+        for (const ln of lines) {
+          ctx.fillText(ln, sideMargin, y);
+          y += lineHeight;
+        }
         return c;
       }
 
@@ -198,12 +225,16 @@
           setTimeout(applySignTexture, 200);
           return;
         }
-        const tex = new THREE.CanvasTexture(makeSignCanvas());
+        const canvas = makeSignCanvas();
+        // Match the panel's shape to the image so text isn't stretched.
+        plane.setAttribute("height", ((4 * canvas.height) / canvas.width).toFixed(3));
+        const tex = new THREE.CanvasTexture(canvas);
         tex.anisotropy = 8;
         tex.needsUpdate = true;
-        mesh.material.map = tex;
-        if (mesh.material.color) mesh.material.color.set("#ffffff");
-        mesh.material.needsUpdate = true;
+        const m = plane.getObject3D("mesh");
+        m.material.map = tex;
+        if (m.material.color) m.material.color.set("#ffffff");
+        m.material.needsUpdate = true;
       }
       applySignTexture();
 
