@@ -30,6 +30,12 @@ PROJECT-NOTES.md for full detail.
   <script> in <head> BEFORE <a-scene>, else they silently don't attach
   (symptom: diagnostic `billboard: OFF`).
 - New signs: own lat/lon + entity `position="0 0 0"` + inner plane at `0 1.6 0`.
+- Media stops (video/photos): NOT a 3D object. A YouTube iframe can't be a WebGL
+  texture, so media shows as an HTML card over the camera feed, auto-opened by a
+  GPS proximity check. iOS blocks autoplay-with-sound → autoplay MUTED + a
+  "Sound on" tap to unmute. Knobs: `MUSEUM` (location), `VIDEO_ID`,
+  `TRIGGER_RADIUS`. `?preview` opens it instantly for off-site testing. Full
+  recipe in PROJECT-NOTES.md "media pop-up" section.
 
 ## Status (June 2026)
 - Bell Tower sign: coordinates correct (35.668851, -80.472087); altitude bug
@@ -37,7 +43,11 @@ PROJECT-NOTES.md for full detail.
   so the billboard attaches. All diagnostics green from the office (y 0.0,
   panel 1.6, billboard on). PENDING: final on-site visual check at the tower.
 - Open: calibrate-mode "Drop" doesn't visually reposition the sign live (bug).
-- Next stop planned: Rowan Museum / Old Courthouse.
+- Rowan Museum / Old Courthouse (rowan-museum.html): DONE. Built as a YouTube
+  video pop-up (coords 35.668582, -80.468758; muted autoplay + Sound-on button;
+  proximity trigger 15m). Confirmed working on iPhone.
+- TODO: capture the office test-anchor lat/lon (read `you:` off the diagnostic)
+  so future stops like historic photos can be tested from the office.
 - Planned business step: pitch the tour to the Rowan County TDA as a B2B managed
   service (annual maintenance + content fee, free to public, NO consumer
   paywall). Pitch must align to the TDA's Tourism Master Plan & Program of Work;
