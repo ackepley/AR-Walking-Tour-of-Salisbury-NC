@@ -10,29 +10,8 @@
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 
     <!-- Custom A-Frame components MUST be registered HERE, in <head>, BEFORE
-         <a-scene> is parsed. If they're defined later (e.g. at the bottom of
-         <body>), the scene initializes the entities without them and the
-         components silently never attach. (This is why the billboard and the
-         old height component did nothing.) -->
+         <a-scene> is parsed. (If defined later they silently never attach.) -->
     <script>
-      // Billboard: rotate an entity around its vertical (Y) axis so the flat
-      // sign always turns to face the camera/viewer.
-      AFRAME.registerComponent("face-camera", {
-        init: function () {
-          this.camWorld = new THREE.Vector3();
-          this.objWorld = new THREE.Vector3();
-        },
-        tick: function () {
-          const cam = this.el.sceneEl.camera;
-          if (!cam || !cam.el) return;
-          cam.el.object3D.getWorldPosition(this.camWorld);
-          this.el.object3D.getWorldPosition(this.objWorld);
-          const dx = this.camWorld.x - this.objWorld.x;
-          const dz = this.camWorld.z - this.objWorld.z;
-          this.el.object3D.rotation.set(0, Math.atan2(dx, dz), 0);
-        },
-      });
-
       // Smooths the noisy iOS compass so the AR view doesn't twitch. It replaces
       // AR.js's raw compass handler with a low-pass filtered one. alpha: lower =
       // smoother but slightly more lag (0.1 is a good balance).
@@ -57,7 +36,6 @@
               : "";
           if (!eventName) return;
 
-          // Remove AR.js's raw listener and install a smoothed wrapper.
           window.removeEventListener(eventName, gps._onDeviceOrientation, false);
           const orig = gps._onDeviceOrientation.bind(gps);
           const alpha = this.data.alpha;
@@ -66,10 +44,9 @@
           window.addEventListener(
             eventName,
             function (event) {
-              orig(event); // let AR.js compute the raw heading
+              orig(event);
               if (gps.heading == null) return;
               if (smoothed === null) smoothed = gps.heading;
-              // shortest-path blend, handling the 360°/0° wrap
               let diff = gps.heading - smoothed;
               if (diff > 180) diff -= 360;
               if (diff < -180) diff += 360;
@@ -81,6 +58,11 @@
         },
       });
     </script>
+
+    <!-- YouTube IFrame Player API. This free script lets us control the player
+         from JavaScript (mute, autoplay, unmute on tap) instead of making the
+         visitor press play. It calls onYouTubeIframeAPIReady() when loaded. -->
+    <script src="https://www.youtube.com/iframe_api"></script>
 
     <style>
       body { margin: 0; overflow: hidden; font-family: -apple-system, sans-serif; }
@@ -100,24 +82,6 @@
         color: #fff; background: rgba(0,0,0,0.55);
         padding: 10px 14px; border-radius: 10px; font-size: 14px;
       }
-      #calPanel {
-        position: fixed; left: 10px; right: 10px; bottom: 70px; z-index: 9998;
-        display: none; background: rgba(0,0,0,0.7); color: #fff;
-        padding: 10px; border-radius: 12px;
-      }
-      #calPanel button {
-        font-size: 16px; padding: 12px 10px; border: none; border-radius: 8px;
-        background: #C8102E; color: #fff;
-      }
-      #dropBtn { width: 100%; }
-      #calPanel .nudge {
-        display: grid; grid-template-columns: repeat(4, 1fr);
-        gap: 5px; margin-top: 7px;
-      }
-      #coordOut {
-        margin-top: 8px; font-size: 13px; font-family: monospace;
-        white-space: pre-wrap; word-break: break-all; color: #FFD45A;
-      }
       /* On-screen diagnostic readout (shown in normal mode after Start). */
       #diag {
         position: fixed; top: 10px; left: 10px; right: 10px; z-index: 9998;
@@ -126,6 +90,31 @@
         font-family: monospace; font-size: 12px; line-height: 1.5;
         white-space: pre-wrap;
       }
+      /* The video pop-up that appears over the live AR camera view. */
+      #videoOverlay {
+        position: fixed; inset: 0; z-index: 9998; display: none;
+        align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.35); padding: 14px;
+      }
+      #videoCard {
+        width: min(92vw, 640px);
+        background: #000; border: 3px solid #FFD45A; border-radius: 14px;
+        overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      }
+      /* 16:9 responsive frame for the player. */
+      #videoFrame { position: relative; width: 100%; padding-top: 56.25%; }
+      #videoFrame > div, #videoFrame > iframe {
+        position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+      }
+      #videoControls {
+        display: flex; gap: 8px; padding: 8px;
+        background: #13132b;
+      }
+      #videoControls button {
+        flex: 1; font-size: 16px; padding: 12px 10px;
+        border: none; border-radius: 8px; color: #fff; background: #C8102E;
+      }
+      #soundBtn { background: #1a7f37; }
     </style>
   </head>
 
@@ -135,26 +124,25 @@
       <p id="introText">
         Stand on North Main Street in front of the Old Courthouse (Rowan Museum).<br /><br />
         Tap Start, then allow <b>Camera</b>, <b>Location</b>, and <b>Motion</b>.<br />
-        Raise your phone to see the info sign appear.
+        Walk up to the courthouse and the video will start on its own.
       </p>
       <button id="startBtn">Start</button>
     </div>
 
     <div id="status">Waiting to start…</div>
 
-    <!-- Live diagnostic readout (shown in normal mode to debug placement) -->
+    <!-- Live diagnostic readout (shows your distance so you can see the trigger) -->
     <div id="diag">diagnostic starting…</div>
 
-    <!-- On-site calibration controls (only shown with ?calibrate) -->
-    <div id="calPanel">
-      <button id="dropBtn">Drop sign 10m ahead of me</button>
-      <div class="nudge">
-        <button data-dir="N">▲ N</button>
-        <button data-dir="S">▼ S</button>
-        <button data-dir="W">◀ W</button>
-        <button data-dir="E">▶ E</button>
+    <!-- The YouTube pop-up (hidden until you arrive, or instantly in ?preview) -->
+    <div id="videoOverlay">
+      <div id="videoCard">
+        <div id="videoFrame"><div id="ytPlayer"></div></div>
+        <div id="videoControls">
+          <button id="soundBtn">🔊 Sound on</button>
+          <button id="closeBtn">✕ Close</button>
+        </div>
       </div>
-      <div id="coordOut">Tap "Drop" while standing where visitors will stand.</div>
     </div>
 
     <a-scene
@@ -164,242 +152,91 @@
       renderer="antialias: true; alpha: true"
     >
       <!-- GPS + compass camera (no videoTexture; relaxed accuracy).
-           smooth-heading filters the noisy iOS compass to reduce jitter. -->
+           No 3D sign now — the video pops up as an overlay when you arrive. -->
       <a-camera
         gps-camera="positionMinAccuracy: 1000"
         rotation-reader
         smooth-heading="alpha: 0.1"
       ></a-camera>
-
-      <!-- The Old Courthouse info sign, anchored to the building's real
-           coordinates. position y=1.6 lifts it to about eye level; face-camera
-           makes it always turn toward you. -->
-      <a-entity
-        id="museumSign"
-        gps-entity-place="latitude: 35.668582; longitude: -80.468758"
-        position="0 0 0"
-        face-camera
-      >
-        <!-- One flat panel, raised to eye level via its OWN local position.
-             The parent entity stays at y=0 on purpose: AR.js only subtracts
-             your GPS altitude when the entity's y is non-zero, so y=0 keeps the
-             sign from being buried ~236m underground. -->
-        <a-plane
-          id="signPlane"
-          position="0 1.6 0"
-          width="4"
-          height="3"
-          material="shader: flat; side: double"
-        ></a-plane>
-      </a-entity>
     </a-scene>
 
     <script>
       const statusEl = document.getElementById("status");
       const setStatus = (t) => (statusEl.textContent = t);
 
+      // The Old Courthouse location (you calibrated this on-site).
       const MUSEUM = { lat: 35.668582, lon: -80.468758 };
 
-      // (smooth-heading and face-camera are registered up in <head> — they must
-      // be defined before <a-scene> is parsed, or they won't attach.)
+      // Your YouTube video. To swap videos later, change just this ID — it's the
+      // part after "watch?v=" in the YouTube URL.
+      const VIDEO_ID = "vRhn56OkTUQ";
 
-      // ---- Draw the sign as one high-res image (no layered 3D text) ----
-      const SIGN_TITLE = "THE OLD COURTHOUSE";
-      const SIGN_BODY =
-        "Completed in 1857 and designed by the firm Conrad & Williams, this " +
-        "Classical Revival courthouse is one of the finest examples of pre-Civil " +
-        "War architecture in North Carolina, with a portico of six Doric columns " +
-        "and a cast-iron balcony. It survived Stoneman's 1865 raid, served as " +
-        "Rowan County's courthouse until 1914, and has housed the Rowan Museum " +
-        "since 2001.";
+      // How close (in meters) you must be for the video to auto-open. GPS on a
+      // phone is good to ~10-15m, so 30m gives a comfortable trigger zone.
+      const TRIGGER_RADIUS = 30;
 
-      function roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.arcTo(x + w, y, x + w, y + h, r);
-        ctx.arcTo(x + w, y + h, x, y + h, r);
-        ctx.arcTo(x, y + h, x, y, r);
-        ctx.arcTo(x, y, x + w, y, r);
-        ctx.closePath();
+      const isPreview = new URLSearchParams(location.search).has("preview");
+
+      // ---- YouTube player setup -------------------------------------------
+      // We use the IFrame API so the video can autoplay MUTED with no tap.
+      // (iOS Safari blocks autoplay WITH sound — that's a browser rule we can't
+      // bypass — so it starts muted and the "Sound on" button unmutes it. That
+      // button counts as your tap, which is what iOS requires for audio.)
+      let player = null;        // the YT player object, once created
+      let apiReady = false;     // becomes true when the YouTube script loads
+      let videoOpened = false;  // so we only auto-open once
+
+      // YouTube calls this automatically when its API script has loaded.
+      function onYouTubeIframeAPIReady() {
+        apiReady = true;
       }
 
-      // Split text into lines that fit within maxWidth.
-      function wrapLines(ctx, text, maxWidth) {
-        const words = text.split(" ");
-        const lines = [];
-        let line = "";
-        for (const w of words) {
-          const test = line ? line + " " + w : w;
-          if (ctx.measureText(test).width > maxWidth && line) {
-            lines.push(line);
-            line = w;
-          } else {
-            line = test;
-          }
-        }
-        if (line) lines.push(line);
-        return lines;
-      }
-
-      function makeSignCanvas() {
-        const W = 1024;
-        const margin = 70; // equal space above the title and below the last line
-        const sideMargin = 80; // left/right text inset
-        const titleFont = "bold 78px -apple-system, Helvetica, Arial, sans-serif";
-        const bodyFont = "46px -apple-system, Helvetica, Arial, sans-serif";
-        const titleBlock = 90; // vertical space the title occupies
-        const gap = 54; // space between title and body
-        const lineHeight = 64;
-
-        // Measure body wrapping first so we can size the canvas to fit.
-        const c = document.createElement("canvas");
-        let ctx = c.getContext("2d");
-        ctx.font = bodyFont;
-        const lines = wrapLines(ctx, SIGN_BODY, W - 2 * sideMargin);
-
-        const titleTop = margin;
-        const bodyTop = titleTop + titleBlock + gap;
-        const bodyBottom = bodyTop + (lines.length - 1) * lineHeight + 52;
-        const H = Math.round(bodyBottom + margin);
-
-        // Resizing clears the canvas, so set size, then draw.
-        c.width = W;
-        c.height = H;
-        ctx = c.getContext("2d");
-
-        ctx.fillStyle = "#13132b";
-        roundRect(ctx, 0, 0, W, H, 40);
-        ctx.fill();
-        ctx.strokeStyle = "#FFD45A";
-        ctx.lineWidth = 10;
-        roundRect(ctx, 18, 18, W - 36, H - 36, 28);
-        ctx.stroke();
-
-        ctx.textBaseline = "top";
-        // Title: centered
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#FFD45A";
-        ctx.font = titleFont;
-        ctx.fillText(SIGN_TITLE, W / 2, titleTop);
-        // Body: left-justified, like a paragraph
-        ctx.textAlign = "left";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = bodyFont;
-        let y = bodyTop;
-        for (const ln of lines) {
-          ctx.fillText(ln, sideMargin, y);
-          y += lineHeight;
-        }
-        return c;
-      }
-
-      function applySignTexture() {
-        const plane = document.getElementById("signPlane");
-        const mesh = plane && plane.getObject3D("mesh");
-        if (!mesh) {
-          setTimeout(applySignTexture, 200);
+      function openVideo() {
+        if (videoOpened) return;        // don't reopen if already showing
+        if (!apiReady) {                // API not loaded yet — try again shortly
+          setTimeout(openVideo, 250);
           return;
         }
-        const canvas = makeSignCanvas();
-        // Match the panel's shape to the image so text isn't stretched.
-        plane.setAttribute("height", ((4 * canvas.height) / canvas.width).toFixed(3));
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.anisotropy = 8;
-        tex.needsUpdate = true;
-        const m = plane.getObject3D("mesh");
-        m.material.map = tex;
-        if (m.material.color) m.material.color.set("#ffffff");
-        m.material.needsUpdate = true;
-      }
-      applySignTexture();
+        videoOpened = true;
+        document.getElementById("videoOverlay").style.display = "flex";
 
-      // NOTE on the "buried sign" bug (June 2026): AR.js gps-entity-place
-      // subtracts the camera's GPS altitude from the entity's y — but ONLY when
-      // that y is non-zero. Salisbury sits ~236m above sea level, so a sign at
-      // y=1.6 got pushed to ~ -234 (underground). Fix: the GPS-anchored entity
-      // stays at y=0 (AR.js then skips the altitude math) and the visible plane
-      // is raised to eye level via its own local position. Elevation-proof.
-
-      // PREVIEW MODE: add ?preview to the URL to pin the sign 12m to your
-      // north (no real GPS needed), so you can check it from anywhere (e.g.
-      // home). Real mode (no ?preview) uses the building's true coordinates.
-      const isPreview = new URLSearchParams(location.search).has("preview");
-      if (isPreview) {
-        const sign = document.getElementById("museumSign");
-        sign.removeAttribute("gps-entity-place"); // stop GPS placement
-        sign.setAttribute("position", "0 1.6 -12"); // 12m to the north
-        document.getElementById("introText").innerHTML =
-          "PREVIEW MODE — the sign is pinned 12m to your north.<br /><br />" +
-          "Tap Start, allow Camera + Motion, then turn until you face north to find it.";
-      }
-
-      // ---- CALIBRATE MODE: position the sign live from your phone ----
-      const isCalibrate = new URLSearchParams(location.search).has("calibrate");
-      let signLat = MUSEUM.lat;
-      let signLon = MUSEUM.lon;
-      const metersPerLon = (lat) => 111111 * Math.cos((lat * Math.PI) / 180);
-
-      // Move the sign to the current signLat/signLon and refresh it immediately.
-      function placeSign() {
-        const sign = document.getElementById("museumSign");
-        sign.setAttribute(
-          "gps-entity-place",
-          `latitude: ${signLat}; longitude: ${signLon}`
-        );
-        // Force AR.js to reposition the sign right now (don't wait for movement).
-        window.dispatchEvent(new CustomEvent("gps-camera-origin-coord-set"));
-        const out = document.getElementById("coordOut");
-        if (out) {
-          out.textContent =
-            "latitude: " + signLat.toFixed(6) + "; longitude: " + signLon.toFixed(6);
-        }
-      }
-
-      if (isCalibrate) {
-        document.getElementById("introText").innerHTML =
-          "CALIBRATE MODE — stand where visitors will stand, facing the courthouse.<br /><br />" +
-          "Tap Start, allow all permissions, then use the controls to place the sign.";
-
-        document.getElementById("dropBtn").addEventListener("click", () => {
-          const cam = document.querySelector("[gps-camera]");
-          const gps = cam && cam.components && cam.components["gps-camera"];
-          if (!gps || !gps.currentCoords) {
-            setStatus("No GPS fix yet — wait a few seconds and try again.");
-            return;
-          }
-          const lat = gps.currentCoords.latitude;
-          const lon = gps.currentCoords.longitude;
-          const h = ((gps.heading == null ? 0 : gps.heading) * Math.PI) / 180;
-          signLat = lat + (10 * Math.cos(h)) / 111111; // 10m in the direction you face
-          signLon = lon + (10 * Math.sin(h)) / metersPerLon(lat);
-          placeSign();
-          setStatus("Sign dropped 10m ahead. Nudge N/S/E/W to fine-tune.");
+        player = new YT.Player("ytPlayer", {
+          videoId: VIDEO_ID,
+          playerVars: {
+            autoplay: 1,      // start automatically…
+            mute: 1,          // …muted, so iOS allows the autoplay
+            playsinline: 1,   // play in-page on iPhone (not fullscreen)
+            rel: 0,           // don't show unrelated videos at the end
+            modestbranding: 1,
+          },
+          events: {
+            onReady: function (e) {
+              e.target.mute();
+              e.target.playVideo();
+            },
+          },
         });
-
-        document.querySelectorAll("#calPanel .nudge button").forEach((b) => {
-          b.addEventListener("click", () => {
-            const step = 1; // meters per tap
-            const dir = b.getAttribute("data-dir");
-            if (dir === "N") signLat += step / 111111;
-            if (dir === "S") signLat -= step / 111111;
-            if (dir === "E") signLon += step / metersPerLon(signLat);
-            if (dir === "W") signLon -= step / metersPerLon(signLat);
-            placeSign();
-          });
-        });
+        setStatus("Video playing (muted). Tap 'Sound on' for audio.");
       }
 
-      // ---- LIVE DIAGNOSTIC READOUT ----------------------------------------
-      // Shows, every half-second, the numbers that tell us WHY the sign is or
-      // isn't visible: GPS fix quality, your coords, the sign's target coords,
-      // distance + compass bearing to it, which way to turn, and — the key one
-      // — where AR.js actually placed the sign in the 3D world. A sane in-world
-      // distance (~5-20m) means it's rendering and you're just facing the wrong
-      // way; a wild or zero number means GPS placement itself is broken.
+      // "Sound on": unmute. Because this runs inside your tap, iOS allows audio.
+      document.getElementById("soundBtn").addEventListener("click", () => {
+        if (!player) return;
+        player.unMute();
+        player.setVolume(100);
+        setStatus("Sound on. Enjoy!");
+      });
+
+      // "Close": stop the video and hide the pop-up.
+      document.getElementById("closeBtn").addEventListener("click", () => {
+        if (player && player.stopVideo) player.stopVideo();
+        document.getElementById("videoOverlay").style.display = "none";
+        setStatus("Video closed. Walk up to the courthouse to replay, or reload.");
+        videoOpened = false; // allow it to auto-open again if you walk back
+      });
+
+      // ---- Distance helpers (for the diagnostic + the proximity trigger) ---
       const toRad = (d) => (d * Math.PI) / 180;
-      const toDeg = (r) => (r * 180) / Math.PI;
-
-      // Great-circle distance between two lat/lon points, in meters.
       function haversineM(lat1, lon1, lat2, lon2) {
         const R = 6371000;
         const dLat = toRad(lat2 - lat1);
@@ -410,25 +247,7 @@
         return 2 * R * Math.asin(Math.sqrt(a));
       }
 
-      // Compass bearing (0-360°, 0=N) from point 1 to point 2.
-      function bearingDeg(lat1, lon1, lat2, lon2) {
-        const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
-        const x =
-          Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-          Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
-        return (toDeg(Math.atan2(y, x)) + 360) % 360;
-      }
-
-      // Read the sign's current GPS target (A-Frame parses the attribute to an object).
-      function signTarget() {
-        const sign = document.getElementById("museumSign");
-        const v = sign && sign.getAttribute("gps-entity-place");
-        if (v && v.latitude != null && v.latitude !== "") {
-          return { lat: parseFloat(v.latitude), lon: parseFloat(v.longitude) };
-        }
-        return null;
-      }
-
+      // ---- LIVE DIAGNOSTIC + proximity trigger ----------------------------
       function updateDiag() {
         const el = document.getElementById("diag");
         if (!el) return;
@@ -441,50 +260,14 @@
         } else {
           const c = gps.currentCoords;
           const acc = c.accuracy != null ? "±" + Math.round(c.accuracy) + "m" : "?";
-          const hdg = gps.heading == null ? "?" : Math.round(gps.heading) + "°";
-          lines.push("GPS fix: " + acc + "    heading: " + hdg);
+          lines.push("GPS fix: " + acc);
           lines.push("you:  " + c.latitude.toFixed(6) + ", " + c.longitude.toFixed(6));
+          lines.push("spot: " + MUSEUM.lat.toFixed(6) + ", " + MUSEUM.lon.toFixed(6));
+          const d = haversineM(c.latitude, c.longitude, MUSEUM.lat, MUSEUM.lon);
+          lines.push("distance: " + d.toFixed(1) + "m  (opens within " + TRIGGER_RADIUS + "m)");
 
-          const t = signTarget();
-          if (t) {
-            lines.push("sign: " + t.lat.toFixed(6) + ", " + t.lon.toFixed(6));
-            const d = haversineM(c.latitude, c.longitude, t.lat, t.lon);
-            const b = bearingDeg(c.latitude, c.longitude, t.lat, t.lon);
-            lines.push("distance: " + d.toFixed(1) + "m    bearing: " + Math.round(b) + "°");
-            if (gps.heading != null) {
-              let turn = (((b - gps.heading) % 360) + 540) % 360; // 0-360
-              turn -= 180; // -180..180
-              const dir = turn >= 0 ? "RIGHT" : "LEFT";
-              lines.push("turn " + dir + " " + Math.abs(Math.round(turn)) + "° to face the sign");
-            }
-          } else {
-            lines.push("sign: (no GPS target — preview mode?)");
-          }
-        }
-
-        // Where AR.js actually positioned the GPS anchor in the 3D scene.
-        // After the altitude fix, this y should read ~0.0 (NOT -23x).
-        const sign = document.getElementById("museumSign");
-        if (sign && sign.object3D) {
-          const p = sign.object3D.position;
-          const worldDist = Math.sqrt(p.x * p.x + p.z * p.z);
-          lines.push(
-            "anchor in-world: " + worldDist.toFixed(1) + "m  (x " +
-              p.x.toFixed(1) + ", z " + p.z.toFixed(1) + ", y " + p.y.toFixed(1) + ")"
-          );
-        }
-
-        // Actual eye-level height of the sign panel (should be ~1.6), and
-        // whether the billboard component attached.
-        const plane = document.getElementById("signPlane");
-        if (plane && plane.object3D) {
-          const wp = new THREE.Vector3();
-          plane.object3D.getWorldPosition(wp);
-          lines.push("sign panel height y: " + wp.y.toFixed(1) + "m");
-        }
-        if (sign) {
-          const fc = sign.components && sign.components["face-camera"];
-          lines.push("billboard: " + (fc ? "on" : "OFF"));
+          // The trigger: once you're inside the radius, open the video.
+          if (d <= TRIGGER_RADIUS) openVideo();
         }
 
         el.textContent = lines.join("\n");
@@ -503,24 +286,18 @@
 
         document.getElementById("startOverlay").style.display = "none";
 
-        // Turn on the live diagnostic readout whenever we're using real GPS
-        // (normal or calibrate mode — preview has no GPS target to report).
-        if (!isPreview) {
-          document.getElementById("diag").style.display = "block";
-          updateDiag();
-          setInterval(updateDiag, 500);
+        if (isPreview) {
+          // TEST MODE: open the video right away, no GPS needed (try it at home).
+          setStatus("Preview — opening the video now.");
+          openVideo();
+          return;
         }
 
-        if (isCalibrate) {
-          document.getElementById("calPanel").style.display = "block";
-          setStatus("Calibrate: face the courthouse, then tap 'Drop sign 10m ahead of me'.");
-        } else {
-          setStatus(
-            isPreview
-              ? "Preview running — turn slowly to find the Old Courthouse sign."
-              : "Look toward the Old Courthouse — the sign should appear."
-          );
-        }
+        // Real mode: show the distance readout and wait until you're close.
+        document.getElementById("diag").style.display = "block";
+        updateDiag();
+        setInterval(updateDiag, 500);
+        setStatus("Walk toward the Old Courthouse — the video opens within " + TRIGGER_RADIUS + "m.");
       });
     </script>
   </body>
