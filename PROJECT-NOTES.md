@@ -19,34 +19,53 @@ altitude (~236 m), but the sign had no altitude set, so AR.js placed it at
 "sea level" — i.e. **236 m straight down, underground.** The diagnostic readout
 showed this as `y -236.0`.
 
-**Fix:** A small `fixed-height` A-Frame component that overrides the entity's
-y-position every frame, pinning the sign to eye level and ignoring AR.js's
-altitude math:
+**Root cause (exact):** AR.js `gps-entity-place` subtracts your GPS altitude from
+the entity's y — but ONLY when that y is non-zero
+(`if (position.y !== 0) { position.y = position.y - altitude; }`). A sign at
+`position="0 1.6 0"` therefore became 1.6 − 236 ≈ −234 (underground).
 
-```js
-AFRAME.registerComponent("fixed-height", {
-  schema: { y: { default: 1.6 } },
-  tick: function () { this.el.object3D.position.y = this.data.y; },
-});
+**Fix that works:** keep the GPS-anchored entity at **y = 0** so AR.js skips the
+altitude math, and raise the *visible panel* to eye level with its OWN local
+position:
+
+```html
+<a-entity gps-entity-place="latitude: ..; longitude: .." position="0 0 0" face-camera>
+  <a-plane id="signPlane" position="0 1.6 0" width="4" height="3"
+           material="shader: flat; side: double"></a-plane>
+</a-entity>
 ```
-Applied on the sign entity with `fixed-height="y: 1.6"`.
 
-**Why this is elevation-proof:** The fix is *relative to the phone* (1.6 m above
-the camera), NOT an absolute sea-level number. The "236" was the symptom, never
-hardcoded. As you move around Salisbury's ridge — uphill, downhill, anywhere —
-the sign always floats at eye level. No per-location elevation tuning needed.
+An earlier `fixed-height` per-frame y-override was tried and **removed** — it
+never attached (see the head-registration lesson below), and this source-level
+fix is cleaner anyway.
+
+**Why this is elevation-proof:** the panel height is relative to the GPS anchor,
+not an absolute sea-level number. Works uphill/downhill anywhere in town.
+
+Verified June 2026 via the diagnostic readout: `anchor ... y 0.0`,
+`sign panel height y: 1.6m`, `billboard: on`.
 
 ---
+
+## Lesson: register custom components in <head>, before <a-scene>
+
+Custom A-Frame components (`face-camera`, `smooth-heading`, any new ones) MUST be
+registered with `AFRAME.registerComponent(...)` in a `<script>` in the `<head>`,
+BEFORE `<a-scene>` is parsed. If defined at the bottom of `<body>`, the scene
+initializes the entities first and the components silently never attach — the
+diagnostic showed `billboard: OFF` and the sign didn't billboard / the old
+height override did nothing. (GPS components work only because they load from the
+AR.js file in `<head>`.) Confirm with the diagnostic's `billboard:` line.
 
 ## Pattern for adding a NEW sign (e.g. Rowan Museum / Old Courthouse)
 
 1. Get the target latitude/longitude for that spot (calibrate on-site, or a map).
-2. Set it on the entity: `gps-entity-place="latitude: <lat>; longitude: <lon>"`.
-3. Keep `fixed-height="y: 1.6"` so it sits at eye level there too.
-4. That's it — elevation is handled automatically because we ignore altitude.
+2. Entity: `gps-entity-place="latitude: <lat>; longitude: <lon>" position="0 0 0" face-camera`.
+3. Inner `<a-plane>` carries the height: `position="0 1.6 0"` (eye level).
+4. That's it — elevation is handled automatically (entity y=0 skips altitude math).
 
-Only change the height number if you *want* a sign deliberately high or low
-(e.g. floating at the top of the actual tower → `fixed-height="y: 12"`).
+Only change the plane's y if you *want* a sign deliberately high or low
+(e.g. floating at the top of the actual tower → plane `position="0 12 0"`).
 
 ---
 
@@ -58,8 +77,8 @@ Only change the height number if you *want* a sign deliberately high or low
 - `gps-camera="positionMinAccuracy: 1000"` (relaxed accuracy so it doesn't reject fixes).
 - iOS needs a "Start" button that calls `DeviceOrientationEvent.requestPermission()`.
 - Sign is drawn as ONE canvas image on a single flat plane (avoids text z-fighting).
-- Helper components: `smooth-heading` (compass jitter), `face-camera` (billboard),
-  `fixed-height` (eye-level lock).
+- Helper components (registered in `<head>`): `smooth-heading` (compass jitter),
+  `face-camera` (billboard). Sign height comes from the inner plane's local y.
 
 ## URL modes
 - plain link → real GPS placement at the tower.

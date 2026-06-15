@@ -20,17 +20,22 @@ PROJECT-NOTES.md for full detail.
   `gps-entity-place`, NO `videoTexture` (kills 3D), `positionMinAccuracy: 1000`,
   iOS Start button calling `DeviceOrientationEvent.requestPermission()`.
 
-## Key technical lesson (the altitude gotcha)
-- AR.js places objects by GPS *altitude*. Salisbury is ~233 m above sea level,
-  so signs with no altitude get buried ~236 m underground (diagnostic showed
-  `y -236.0`). Fix = `fixed-height` component locking the entity's y to eye
-  level every frame (`fixed-height="y: 1.6"`). It's relative to the phone, so it
-  works at every elevation across Salisbury's ridge — no per-location tuning.
-- New signs only need their own lat/lon + `fixed-height`.
+## Key technical lessons
+- Altitude gotcha: AR.js gps-entity-place subtracts GPS altitude from the
+  entity's y ONLY when y != 0. Salisbury ~233 m ASL buried signs ~236 m down.
+  FIX: anchor entity at `position="0 0 0"` (skips altitude math) and put the
+  eye-level height on the inner `<a-plane position="0 1.6 0">`. Elevation-proof.
+  (Old per-frame `fixed-height` override was removed — it never attached.)
+- Custom components (face-camera, smooth-heading) MUST be registered in a
+  <script> in <head> BEFORE <a-scene>, else they silently don't attach
+  (symptom: diagnostic `billboard: OFF`).
+- New signs: own lat/lon + entity `position="0 0 0"` + inner plane at `0 1.6 0`.
 
 ## Status (June 2026)
 - Bell Tower sign: coordinates correct (35.668851, -80.472087); altitude bug
-  fixed via `fixed-height`. Awaiting Aaron's on-site confirmation next day.
+  fixed via y=0 anchor + inner-plane height; custom components moved to <head>
+  so the billboard attaches. All diagnostics green from the office (y 0.0,
+  panel 1.6, billboard on). PENDING: final on-site visual check at the tower.
 - Open: calibrate-mode "Drop" doesn't visually reposition the sign live (bug).
 - Next stop planned: Rowan Museum / Old Courthouse.
 - Planned business step: pitch the tour to the Rowan County TDA as a B2B managed
