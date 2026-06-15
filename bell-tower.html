@@ -104,13 +104,16 @@
       <a-entity
         id="bellTowerSign"
         gps-entity-place="latitude: 35.668851; longitude: -80.472087"
-        position="0 1.6 0"
+        position="0 0 0"
         face-camera
-        fixed-height="y: 1.6"
       >
-        <!-- One flat panel; its image is drawn at runtime (see script). -->
+        <!-- One flat panel, raised to eye level via its OWN local position.
+             The parent entity stays at y=0 on purpose: AR.js only subtracts
+             your GPS altitude when the entity's y is non-zero, so y=0 keeps the
+             sign from being buried ~236m underground. -->
         <a-plane
           id="signPlane"
+          position="0 1.6 0"
           width="4"
           height="3"
           material="shader: flat; side: double"
@@ -297,16 +300,12 @@
         },
       });
 
-      // Keep the sign at eye level. gps-entity-place sets the entity's y from
-      // GPS *altitude*; because Salisbury sits ~236m above sea level and the
-      // sign has no altitude of its own, AR.js buries it ~236m underground.
-      // We override y every frame so the sign stays put at eye height.
-      AFRAME.registerComponent("fixed-height", {
-        schema: { y: { default: 1.6 } },
-        tick: function () {
-          this.el.object3D.position.y = this.data.y;
-        },
-      });
+      // NOTE on the "buried sign" bug (June 2026): AR.js gps-entity-place
+      // subtracts the camera's GPS altitude from the entity's y — but ONLY when
+      // that y is non-zero. Salisbury sits ~236m above sea level, so a sign at
+      // y=1.6 got pushed to ~ -234 (underground). Fix: the GPS-anchored entity
+      // stays at y=0 (AR.js then skips the altitude math) and the visible plane
+      // is raised to eye level via its own local position. Elevation-proof.
 
       // PREVIEW MODE: add ?preview to the URL to pin the sign 12m to your
       // north (no real GPS needed), so you can check it from anywhere (e.g.
@@ -450,15 +449,29 @@
           }
         }
 
-        // Where AR.js actually positioned the sign in the 3D scene.
+        // Where AR.js actually positioned the GPS anchor in the 3D scene.
+        // After the altitude fix, this y should read ~0.0 (NOT -23x).
         const sign = document.getElementById("bellTowerSign");
         if (sign && sign.object3D) {
           const p = sign.object3D.position;
           const worldDist = Math.sqrt(p.x * p.x + p.z * p.z);
           lines.push(
-            "placed in-world: " + worldDist.toFixed(1) + "m  (x " +
+            "anchor in-world: " + worldDist.toFixed(1) + "m  (x " +
               p.x.toFixed(1) + ", z " + p.z.toFixed(1) + ", y " + p.y.toFixed(1) + ")"
           );
+        }
+
+        // Actual eye-level height of the sign panel (should be ~1.6), and
+        // whether the billboard component attached.
+        const plane = document.getElementById("signPlane");
+        if (plane && plane.object3D) {
+          const wp = new THREE.Vector3();
+          plane.object3D.getWorldPosition(wp);
+          lines.push("sign panel height y: " + wp.y.toFixed(1) + "m");
+        }
+        if (sign) {
+          const fc = sign.components && sign.components["face-camera"];
+          lines.push("billboard: " + (fc ? "on" : "OFF"));
         }
 
         el.textContent = lines.join("\n");
