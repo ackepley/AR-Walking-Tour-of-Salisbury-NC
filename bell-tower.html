@@ -106,6 +106,7 @@
         gps-entity-place="latitude: 35.668851; longitude: -80.472087"
         position="0 1.6 0"
         face-camera
+        fixed-height="y: 1.6"
       >
         <!-- One flat panel; its image is drawn at runtime (see script). -->
         <a-plane
@@ -293,6 +294,17 @@
           const dx = this.camWorld.x - this.objWorld.x;
           const dz = this.camWorld.z - this.objWorld.z;
           this.el.object3D.rotation.set(0, Math.atan2(dx, dz), 0);
+        },
+      });
+
+      // Keep the sign at eye level. gps-entity-place sets the entity's y from
+      // GPS *altitude*; because Salisbury sits ~236m above sea level and the
+      // sign has no altitude of its own, AR.js buries it ~236m underground.
+      // We override y every frame so the sign stays put at eye height.
+      AFRAME.registerComponent("fixed-height", {
+        schema: { y: { default: 1.6 } },
+        tick: function () {
+          this.el.object3D.position.y = this.data.y;
         },
       });
 
